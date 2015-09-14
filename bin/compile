@@ -172,8 +172,16 @@ fi
 npm install grunt-cli
 npm install grunt
 
+counter=0
 until run_grunt; do
-  echo "Grunt process crashed with exit code $?.  Respawning.." >&2
+
+  counter=((counter+1))
+  if [ $counter -eq 10 ]; then
+    echo "Grunt failed to run 10 times. Exiting..."
+    exit 1
+  fi
+
+  echo "Grunt process crashed with exit code $?. Restarting...($counter/10)" >&2
   sleep 1
 done
 
