@@ -4,6 +4,15 @@ set -e            # fail fast
 set -o pipefail   # don't ignore exit codes when piping output
 # set -x          # enable debugging
 
+run_grunt() {
+  if [ -f $build_dir/grunt.js ] || [ -f $build_dir/Gruntfile.js ] || [ -f $build_dir/gruntfile.js ] || [ -f $build_dir/Gruntfile.coffee ]; then
+    echo "-----> Found Gruntfile, running grunt heroku:$NODE_ENV task"
+    $build_dir/node_modules/.bin/grunt heroku:$NODE_ENV
+  else
+    echo "-----> No Gruntfile (grunt.js, Gruntfile.js, gruntfile.js, Gruntfile.coffee) found"
+  fi
+}
+
 # Configure directories
 build_dir=$1
 cache_dir=$2
@@ -153,37 +162,28 @@ mkdir -p $build_dir/.profile.d
 echo "export PATH=\"\$HOME/vendor/node/bin:\$HOME/bin:\$HOME/node_modules/.bin:\$PATH\";" > $build_dir/.profile.d/nodejs.sh
 
 # Check and run Grunt
-(
-  if [ -f $build_dir/grunt.js ] || [ -f $build_dir/Gruntfile.js ] || [ -f $build_dir/gruntfile.js ] || [ -f $build_dir/Gruntfile.coffee ]; then
-    # get the env vars
-    if [ -d "$env_dir" ]; then
-      status "Exporting config vars to environment"
-      export_env_dir $env_dir
-    fi
+# get the env vars
+if [ -d "$env_dir" ]; then
+  status "Exporting config vars to environment"
+  export_env_dir $env_dir
+fi
 
-    # make sure that grunt and grunt-cli are installed locally
-    npm install grunt-cli
-    npm install grunt
-    echo "-----> Found Gruntfile, running grunt heroku:$NODE_ENV task"
-    $build_dir/node_modules/.bin/grunt heroku:$NODE_ENV
+# make sure that grunt and grunt-cli are installed locally
+npm install grunt-cli
+npm install grunt
 
-    status "Pruning dev dependencies"
-    npm prune --production 2>&1 | indent
+counter=0
+until run_grunt; do
 
-  else
-    echo "-----> No Gruntfile (grunt.js, Gruntfile.js, gruntfile.js, Gruntfile.coffee) found"
+  counter=((counter+1))
+  if [ $counter -eq 10 ]; then
+    echo "Grunt failed to run 10 times. Exiting..."
+    exit 1
   fi
-)
 
-# Post package.json to nomnom service
-# Use a subshell so failures won't break the build.
-(
-  curl \
-    --data @$build_dir/package.json \
-    --fail \
-    --silent \
-    --request POST \
-    --header "content-type: application/json" \
-    https://nomnom.heroku.com/?request_id=$REQUEST_ID \
-    > /dev/null
-) &
+  echo "Grunt process crashed with exit code $?. Restarting...($counter/10)" >&2
+  sleep 1
+done
+
+status "Pruning dev dependencies"
+npm prune --production 2>&1 | indent
