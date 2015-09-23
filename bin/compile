@@ -175,7 +175,7 @@ npm install grunt
 counter=0
 until run_grunt; do
 
-  counter=((counter+1))
+  counter=$((counter+1))
   if [ $counter -eq 10 ]; then
     echo "Grunt failed to run 10 times. Exiting..."
     exit 1
